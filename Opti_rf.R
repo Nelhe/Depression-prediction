@@ -84,3 +84,33 @@ dta_err$fitted <- pred_rf
 ggplot(dta_err) + aes(x = Depression_level, y = fitted) +
   geom_point() +
   geom_abline(slope = 1, intercept = 0, color = 'red', linetype = 'dashed')
+
+
+# Pseudo-SMOTE sur des niveaux de dépression égaux à 0 --------------
+
+table(as.factor(dta_train$Depression_level))
+# idée : passer de 429 valeurs "0" à 150 (valeur choisie arbitrairement)
+
+dta_train_no0 <- dta_train[dta_train$Depression_level != 0,]
+dta_train_0 <- dta_train[dta_train$Depression_level == 0,]
+
+library(magrittr)
+
+dta_train_reech <- dta_train_0[sample(1:nrow(dta_train_0), 150), ] |>
+  dplyr::bind_rows(dta_train_no0) %>%
+  .[sample(1:nrow(.), nrow(.)),]
+
+mod_rf_reech <- train(Depression_level ~., data = dta_train_reech,
+                method = 'ranger', trControl = ctrl, tuneGrid = param)
+mod_rf_reech$results
+mod_rf_reech$bestTune
+
+pred_rf_reech <- predict(mod_rf_reech, newdata = dta_test)
+sqrt(mean((pred_rf_reech - dta_test$Depression_level)^2))     # calcul de la RMSEP
+summary(pred_rf_reech - dta_test$Depression_level)      # distribution des erreurs
+boxplot(pred_rf_reech - dta_test$Depression_level)
+
+dta_err <- data.frame(Valeur = c(dta_test$Depression_level, pred_rf_reech),
+                      Type = rep(c("Observé", "Prédit"), each = 1074))
+ggplot(dta_err) + aes(y = Valeur, x = Type) + 
+  geom_boxplot()
