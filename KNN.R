@@ -175,3 +175,8 @@ plot(data_test$Depression_level, predictions,
 abline(0, 1, col = "red")
 # Si la majorité des points se trouve au-dessus de la ligne, cela indique une 
 # tendance générale à la surestimation.
+
+dta_err <- data.frame(Valeur = c(data_test$Depression_level, predictions),
+                      Type = rep(c("Observé", "Prédit"), each = 536))
+ggplot(dta_err) + aes(y = Valeur, x = Type) + 
+  geom_boxplot()

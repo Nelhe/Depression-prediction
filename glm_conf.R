@@ -40,3 +40,7 @@ RMSE_mixte <- sqrt(mean((predictions_mixte - test$Depression_level)^2))
 res <- mixte_model$results
 plot(res[,2], res[,3])
 
+dta_err <- data.frame(Valeur = c(test$Depression_level, predictions_mixte),
+                      Type = rep(c("Observé", "Prédit"), each = 537))
+ggplot(dta_err) + aes(y = Valeur, x = Type) + 
+  geom_boxplot()
