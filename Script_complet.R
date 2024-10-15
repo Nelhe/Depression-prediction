@@ -132,7 +132,17 @@ ggplot(data.frame(Observed = dta_test$Depression_level,
                   Predicted = pred_svm)) + 
   aes(x = Observed, y = Predicted, color = Observed) +
   geom_point() +
-  geom_abline(a = 0, b = 1, linetype = 'dashed')
+  geom_abline(a = 0, b = 1, linetype = 'dashed') +
+  labs(title = 'Predicted vs Observed')
+
+# Proportion de valeurs sur- et sous-estimées
+mean(dta_test$Depression_level > pred_svm)
+mean(dta_test$Depression_level < pred_svm)
+
+# Test de la relation linéaire
+test_lien <- lm(Predicted ~ Observed, data = data.frame(Observed = dta_test$Depression_level,
+                                                         Predicted = pred_svm))
+summary(test_lien) # lien linéaire pas à écarter, on teste les seuils
 
 
 ########################################
@@ -143,7 +153,7 @@ ggplot(data.frame(Observed = dta_test$Depression_level,
 
 library(pROC)
 
-# Score > 18 : dépression légère (d'après le DASS-21)
+# Score > 4.5 : dépression légère (d'après le DASS-21)
 depr_obs <- ifelse(dta_test$Depression_level*2 > 9, 1, 0)
 
 # Test de seuils pour les valeurs prédites
@@ -175,7 +185,7 @@ for (i in 1:length(seuils)){
   aucs_svm[i] <- auc(roc_svm)
 }
 
-# Représentation de l'évolution des critères
+# Représentation de l'évolution des critères pour chaque méthode
 tab_crit <- data.frame(Threshold = c(seuils, seuils),
                        Accuracy = c(acc_glm, acc_svm),
                        F1_score = c(f1_glm, f1_svm),
@@ -209,3 +219,25 @@ seuils[which(aucs_svm == max(aucs_svm))]
 # Matrices de confusion pour les seuils optimaux choisis
 table(depr_obs, ifelse(pred_glm > 4, 1, 0))
 table(depr_obs, ifelse(pred_svm > 3, 1, 0))
+
+
+########################################
+# Sélection de variables pour le GLM
+########################################
+
+mod_complet <- lm(Depression_level ~ ., data = dta_train)
+
+mod_step <- RcmdrMisc::stepwise(mod_complet, direction = 'backward')
+mod_step_bic <- RcmdrMisc::stepwise(mod_complet, direction = 'backward', criterion = 'BIC')
+
+pred_glm_reduit <- predict(mod_step, newdata = dta_test) 
+sqrt(mean((pred_glm_reduit - dta_test$Depression_level)^2))
+
+dta_err_glm <- data.frame(Values = c(pred_glm, pred_glm_reduit),
+                          Method = rep(c('GLM', 'GLM step'), each = length(pred_glm)))
+
+ggplot(dta_err_glm) + aes(x = Method, y = Values) +
+  geom_boxplot() +
+  labs(title = "GLM complet vs GLM réduit")
+
+table(depr_obs, ifelse(pred_glm_reduit > 4, 1, 0))
