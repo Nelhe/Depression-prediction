@@ -125,23 +125,25 @@ dta_err$Method <- as.factor(dta_err$Method) |>
   forcats::fct_relevel('Observed')
 
 ggplot(dta_err) + aes(x = Method, y = Values, fill = Method) +
-  geom_boxplot()
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Set2", type = 'qual') +
+  labs(title = "Observed values VS predicted values")
 
 # Graphique valeurs observées / valeurs prédites
 ggplot(data.frame(Observed = dta_test$Depression_level,
-                  Predicted = pred_svm)) + 
+                  Predicted = pred_glm)) + 
   aes(x = Observed, y = Predicted, color = Observed) +
   geom_point() +
   geom_abline(intercept = 0, slope = 1, linetype = 'dashed') +
   labs(title = 'Predicted vs Observed')
 
 # Proportion de valeurs sur- et sous-estimées
-mean(dta_test$Depression_level > pred_svm)
-mean(dta_test$Depression_level < pred_svm)
+mean(dta_test$Depression_level > pred_glm)
+mean(dta_test$Depression_level < pred_glm)
 
 # Test de la relation linéaire
 test_lien <- lm(Predicted ~ Observed, data = data.frame(Observed = dta_test$Depression_level,
-                                                         Predicted = pred_svm))
+                                                         Predicted = pred_glm))
 summary(test_lien) # lien linéaire pas à écarter, on teste les seuils
 
 
@@ -149,7 +151,7 @@ summary(test_lien) # lien linéaire pas à écarter, on teste les seuils
 # Choix d'un seuil de décision
 ########################################
 
-# Méthodes évaluées : GLM, SVM
+# Méthode évaluée : GLM 
 
 library(pROC)
 
@@ -163,62 +165,31 @@ acc_glm <- rep(0, length(seuils))
 f1_glm <- rep(0, length(seuils))
 aucs_glm <- rep(0, length(seuils))
 
-acc_svm <- rep(0, length(seuils))
-f1_svm <- rep(0, length(seuils))
-aucs_svm <- rep(0, length(seuils))
-
 for (i in 1:length(seuils)){
-  predic_svm <- ifelse(pred_svm > seuils[i], 1, 0)
   predic_glm <- ifelse(pred_glm > seuils[i], 1, 0)
   
   acc_glm[i] <- mean(depr_obs == predic_glm)
-  acc_svm[i] <- mean(depr_obs == predic_svm)
   
   mat_conf_glm <- as.matrix(table(depr_obs, predic_glm))
-  mat_conf_svm <- as.matrix(table(depr_obs, predic_svm))
   f1_glm[i] <- 2*mat_conf_glm[2,2]/(2*mat_conf_glm[2,2] + mat_conf_glm[1,2] + mat_conf_glm[2,1])
-  f1_svm[i] <- 2*mat_conf_svm[2,2]/(2*mat_conf_svm[2,2] + mat_conf_svm[1,2] + mat_conf_svm[2,1])
   
   roc_glm <- roc(depr_obs, predic_glm)
-  roc_svm <- roc(depr_obs, predic_svm)
   aucs_glm[i] <- auc(roc_glm)
-  aucs_svm[i] <- auc(roc_svm)
 }
 
-# Représentation de l'évolution des critères pour chaque méthode
-tab_crit <- data.frame(Threshold = c(seuils, seuils),
-                       Accuracy = c(acc_glm, acc_svm),
-                       F1_score = c(f1_glm, f1_svm),
-                       AUC = c(aucs_glm, aucs_svm),
-                       Method = rep(c('GLM', 'SVM'), each = length(seuils)))
-
-ggplot(tab_crit) + aes(x = Threshold, y = Accuracy, color = Method) +
-  geom_point() +
-  geom_line() +
-  labs(title = "Accuracy")
-
-ggplot(tab_crit) + aes(x = Threshold, y = F1_score, color = Method) +
-  geom_point() +
-  geom_line() +
-  labs(title = "F1 score")
-
-ggplot(tab_crit) + aes(x = Threshold, y = AUC, color = Method) +
-  geom_point() +
-  geom_line() +
-  labs(title = "AUC")
-
-# Détection des seuils optimisés pour chaque critère
+# Détection des seuils optimisés
 seuils[which(acc_glm == max(acc_glm))]
 seuils[which(f1_glm == max(f1_glm))]
 seuils[which(aucs_glm == max(aucs_glm))]
 
-seuils[which(acc_svm == max(acc_svm))]
-seuils[which(f1_svm == max(f1_svm))]
-seuils[which(aucs_svm == max(aucs_svm))]
+# Matrice de confusion pour le seuil optimal choisi
+library(yardstick)
 
-# Matrices de confusion pour les seuils optimaux choisis
-table(depr_obs, ifelse(pred_glm > 4, 1, 0))
-table(depr_obs, ifelse(pred_svm > 3, 1, 0))
+table(depr_obs, ifelse(pred_glm > 4, 1, 0)) |>
+  conf_mat() |>
+  autoplot(type = 'heatmap') + 
+  scale_fill_gradient(low="#D6EAF8",high = "#2E86C1") +
+  labs(x = "Valeurs prédites", y = "Valeurs observées")
 
 
 ########################################
@@ -236,8 +207,13 @@ sqrt(mean((pred_glm_reduit - dta_test$Depression_level)^2))
 dta_err_glm <- data.frame(Values = c(pred_glm, pred_glm_reduit),
                           Method = rep(c('GLM', 'GLM step'), each = length(pred_glm)))
 
-ggplot(dta_err_glm) + aes(x = Method, y = Values) +
+ggplot(dta_err_glm) + aes(x = Method, y = Values, fill = Method) +
   geom_boxplot() +
-  labs(title = "GLM complet vs GLM réduit")
+  scale_fill_brewer(palette = 'Set2') +
+  labs(title = "GLM complet vs GLM réduit") 
 
-table(as.factor(depr_obs), ifelse(pred_glm_reduit > 4, 1, 0))
+table(as.factor(depr_obs), ifelse(pred_glm_reduit > 4, 1, 0)) |>
+  conf_mat() |>
+  autoplot(type = 'heatmap') + 
+  scale_fill_gradient(low="#D6EAF8",high = "#2E86C1") +
+  labs(x = "Valeurs prédites", y = "Valeurs observées")
