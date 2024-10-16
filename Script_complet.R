@@ -40,7 +40,7 @@ res_famd <- FactoMineR::FAMD(dta_clair, sup.var = 8, graph = F)
 # graphique des variables quali :
 factoextra::fviz_famd_var(res_famd, "quali.var", col.var = 'contrib', repel = T)
 # graphique des variables :
-factoextra::fviz_famd_var(res_famd, "var", col.var = 'contrib')
+factoextra::fviz_famd_var(res_famd, "var", col.var = 'contrib', repel = T)
 
 
 ################################
@@ -56,7 +56,7 @@ dta_test <- dta[-ind_train,]
 
 library(caret)
 
-ctrl <- trainControl(method = "LGOCV", number = 10)
+ctrl <- trainControl(method = "cv", number = 10)
 
 # k plus proches voisins
 tune_knn <- expand.grid(k = 1:100)
@@ -124,7 +124,7 @@ dta_err <- data.frame(Observed = dta$Depression_level,
 dta_err$Method <- as.factor(dta_err$Method) |>
   forcats::fct_relevel('Observed')
 
-ggplot(dta_err) + aes(x = Method, y = Values) +
+ggplot(dta_err) + aes(x = Method, y = Values, fill = Method) +
   geom_boxplot()
 
 # Graphique valeurs observées / valeurs prédites
@@ -132,7 +132,7 @@ ggplot(data.frame(Observed = dta_test$Depression_level,
                   Predicted = pred_svm)) + 
   aes(x = Observed, y = Predicted, color = Observed) +
   geom_point() +
-  geom_abline(a = 0, b = 1, linetype = 'dashed') +
+  geom_abline(intercept = 0, slope = 1, linetype = 'dashed') +
   labs(title = 'Predicted vs Observed')
 
 # Proportion de valeurs sur- et sous-estimées
@@ -240,4 +240,4 @@ ggplot(dta_err_glm) + aes(x = Method, y = Values) +
   geom_boxplot() +
   labs(title = "GLM complet vs GLM réduit")
 
-table(depr_obs, ifelse(pred_glm_reduit > 4, 1, 0))
+table(as.factor(depr_obs), ifelse(pred_glm_reduit > 4, 1, 0))
