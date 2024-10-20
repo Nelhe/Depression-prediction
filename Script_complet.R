@@ -12,8 +12,17 @@ summary(dta)
 
 ## Visualisation de la variable à prédire
 ggplot(dta) + aes(y = Depression_level) +
-  geom_boxplot(alpha = 0.8) +
-  labs(title = "Depression level", y = NULL)
+  geom_boxplot(alpha = 0.8, fill = 'cornsilk') +
+  labs(title = "Depression level", y = NULL) +
+  theme_minimal() +
+  labs(title = "Distribution des niveaux de dépression",
+       y = "Niveau de dépression", 
+       subtitle = "Objectif : visualiser si les données sont équilibrées",
+       caption = "Plus d'observations en dessous de 4 qu'au dessus") +
+  theme(panel.grid.minor.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        plot.subtitle = element_text("Objectif : visualiser si les données sont équilibrées",
+                                     size = 10, color = 'gray30'))
 
 ## AFDM
 dta_clair <- dta
@@ -38,10 +47,39 @@ summary(dta_clair)  # vérification des niveaux
 res_famd <- FactoMineR::FAMD(dta_clair, sup.var = 8, graph = F)
 
 # graphique des variables quali :
-factoextra::fviz_famd_var(res_famd, "quali.var", col.var = 'contrib', repel = T)
-# graphique des variables :
-factoextra::fviz_famd_var(res_famd, "var", col.var = 'contrib', repel = T)
+coord_quali <- res_famd$quali.var$coord[,1:2] |>
+  as.data.frame()
+coord_quali$Type <- c(rep("Signalétique",14), rep(c("Quotidien (négatif)", "Quotidien (positif)"), 14))
+coord_quali$Forme <- rep(c("S", "Q"), c(14,28))
 
+ggplot(coord_quali) + aes(x = Dim.1, y = Dim.2, color = Type, shape = Forme) +
+  geom_hline(yintercept = 0, alpha = 0.8, linetype = 'dashed') +
+  geom_vline(xintercept = 0, alpha = 0.8, linetype = 'dashed') +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("darkorange", "brown1", "cornflowerblue")) +
+  theme_minimal() +
+  labs(title = "AFDM - Variables qualitatives",
+       x = paste("Dim 1 (", round(res_famd$eig[1,2], 1), " %)", sep = ''),
+       y = paste("Dim 2 (", round(res_famd$eig[2,2], 1), " %)", sep = '')) +
+  guides(shape = 'none')
+
+# graphique des variables :
+coord_var <- res_famd$var$coord[,1:2] |>
+  rbind(res_famd$var$coord.sup[,1:2]) |>
+  as.data.frame()
+coord_var$Type <- rep(c("Signalétique", "Quotidien", "Niveau de dépression"), c(7,14, 1))
+
+ggplot(coord_var) + aes(x = Dim.1, y = Dim.2, color = Type, shape = Type) +
+  geom_hline(yintercept = 0, alpha = 0.8, linetype = 'dashed') +
+  geom_vline(xintercept = 0, alpha = 0.8, linetype = 'dashed') +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("darkgreen", "cornflowerblue", "darkorange")) +
+  theme_minimal() +
+  labs(title = "ADFM - Variables",
+       x = paste("Dim 1 (", round(res_famd$eig[1,2], 1), " %)", sep = ''),
+       y = paste("Dim 2 (", round(res_famd$eig[2,2], 1), " %)", sep = '')) +
+  guides(shape = 'none') +
+  geom_point()
 
 ################################
 # Entraînement des algorithmes
@@ -114,28 +152,31 @@ tab_rmsep <- data.frame(Method = c('knn', 'GLM', 'GLM net', 'SVM', 'Random fores
 tab_rmsep
 
 # Répartition des erreurs
-dta_err <- data.frame(Observed = dta$Depression_level, 
+dta_err <- data.frame(Observée = dta$Depression_level, 
                       KNN = pred_knn,
                       GLM = pred_glm,
                       GLMnet = pred_glmnet,
                       SVM = pred_svm,
                       RF = pred_rf) |>
-  tidyr::pivot_longer(Observed:RF, names_to = 'Method', values_to = 'Values')
-dta_err$Method <- as.factor(dta_err$Method) |>
-  forcats::fct_relevel('Observed')
+  tidyr::pivot_longer(Observée:RF, names_to = 'Méthode', values_to = 'Values')
+dta_err$Méthode <- as.factor(dta_err$Méthode) |>
+  forcats::fct_relevel('Observée')
 
-ggplot(dta_err) + aes(x = Method, y = Values, fill = Method) +
+ggplot(dta_err) + aes(x = Méthode, y = Values, fill = Méthode) +
   geom_boxplot() +
   scale_fill_brewer(palette = "Set2", type = 'qual') +
-  labs(title = "Observed values VS predicted values")
+  labs(title = "Comparaison des niveaux de dépression observés et prédits par différentes méthodes de Machine Learning",
+       x = "Méthode",
+       y = "Niveau de dépression")
 
 # Graphique valeurs observées / valeurs prédites
-ggplot(data.frame(Observed = dta_test$Depression_level,
-                  Predicted = pred_glm)) + 
-  aes(x = Observed, y = Predicted, color = Observed) +
+ggplot(data.frame(Observées = dta_test$Depression_level,
+                  Prédites = pred_glm)) + 
+  aes(x = Observées, y = Prédites, color = Observées) +
   geom_point() +
   geom_abline(intercept = 0, slope = 1, linetype = 'dashed') +
-  labs(title = 'Predicted vs Observed')
+  labs(title = "Valeurs prédites vs Valeurs observées",
+       x = "Observées", y = "Prédites")
 
 # Proportion de valeurs sur- et sous-estimées
 mean(dta_test$Depression_level > pred_glm)
@@ -205,12 +246,13 @@ pred_glm_reduit <- predict(mod_step, newdata = dta_test)
 sqrt(mean((pred_glm_reduit - dta_test$Depression_level)^2))
 
 dta_err_glm <- data.frame(Values = c(pred_glm, pred_glm_reduit),
-                          Method = rep(c('GLM', 'GLM step'), each = length(pred_glm)))
+                          Modèle = rep(c('GLM', 'GLM step'), each = length(pred_glm)))
 
-ggplot(dta_err_glm) + aes(x = Method, y = Values, fill = Method) +
+ggplot(dta_err_glm) + aes(x = Modèle, y = Values, fill = Modèle) +
   geom_boxplot() +
   scale_fill_brewer(palette = 'Set2') +
-  labs(title = "GLM complet vs GLM réduit") 
+  labs(title = "Distribution des valeurs prédites des deux modèles",
+       x = "Modèle", y = "Niveau de dépression") 
 
 table(as.factor(depr_obs), ifelse(pred_glm_reduit > 4, 1, 0)) |>
   conf_mat() |>
