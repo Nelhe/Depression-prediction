@@ -19,4 +19,5 @@ Vous trouverez dans ce dépôt :
 * les scripts exploratoires pour chaque méthode de Machine Learning envisagée (dossier Scripts exploratoires)
 * le script complet (Script_complet.R) retraçant l'intégralité de l'étude
 * les graphiques générés par le script complet (dossier Graphiques)
-* le jeu de données aux formats RData et CSV.
+* le jeu de données aux formats RData et CSV
+* le diaporama pour la présentation.
