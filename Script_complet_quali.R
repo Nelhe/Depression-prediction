@@ -253,7 +253,7 @@ for (i in 1:nrow(tune_rf)){
   
   oob_error[i] <- mod_rf$prediction.error
   
-  print(paste("Random forest :", k, "/810 - DONE"))
+  print(paste("Random forest :", i, "/810 - DONE"))
 }
   
 mtry_rf <- tune_rf[which(oob_error == min(oob_error))[1],1]
@@ -275,7 +275,7 @@ conf_rf
 
 # ici : balanced accuracy, F1-score, taux de faux positifs, taux de faux négatifs
 
-tab_perf <- c(Méthode = c("kNN", "GLM", "GLM net", "SVM", "Random forest"),
+tab_perf <- data.frame(Méthode = c("kNN", "GLM", "GLM net", "SVM", "Random forest"),
               Balanced_accuracy = c(bal_acc(conf_knn),
                                     bal_acc(conf_glm),
                                     bal_acc(conf_glmnet),
@@ -298,3 +298,5 @@ tab_perf <- c(Méthode = c("kNN", "GLM", "GLM net", "SVM", "Random forest"),
                                 tfn(conf_rf)))
 
 tab_perf
+
+save(tab_perf, file = "tab_perf.rData")
