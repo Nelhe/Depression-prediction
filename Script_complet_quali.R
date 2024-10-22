@@ -129,11 +129,60 @@ pred_classe_glm <- ifelse(pred_glm >= s_glm, 1, 0)
 
 table(dta_test$Depression_severity, pred_classe_glm)
 
+
 # LDA
 
 
 # SVM
-# tune_svm <- expand.grid(C = seq(0.1, 2, length = 5))
+library(e1071)
+
+tune_svm <- expand.grid(C = seq(0.1, 2, length = 20),
+                        s = seq(0.05, 0.5, by = 0.05))
+
+segs <- pls::cvsegments(nrow(dta_train), 10)
+
+C_opti <- rep(0, 10)
+seuil_opti <- rep(0, 10)
+
+for (k in 1:10){
+  train <- dta_train[-segs[[k]],]
+  valid <- dta_train[segs[[k]],]
+  
+  f1_scores <- rep(0, nrow(tune_svm))
+  
+  for (i in 1:nrow(tune_svm)){
+    mod_svm <- svm(Depression_severity ~., data = train, cost = tune_svm[i,1], probability = T)
+    
+    pred <- predict(mod_svm, newdata = valid, probability = T) |>
+      attributes()
+    pred_classe <- apply(pred$probabilities, MARGIN = 1, FUN = function(x, s) return(ifelse(x[2] > s, 1, 0)),
+                         s = tune_svm[i,2])
+    
+    f1_scores[i] <- f1(as.numeric(valid$Depression_severity) - 1, 
+                       as.numeric(pred_classe))
+  }
+  
+  C_opti[[k]] <- tune_svm[which(f1_scores == max(f1_scores))[1],1]
+  seuil_opti[[k]] <- tune_svm[which(f1_scores == max(f1_scores))[1],2]
+  
+  print(k)
+}
+
+C_opti
+seuil_opti
+
+k_knn <- sort(table(k_opti), decreasing = T)[1] |> 
+  names() |>
+  as.numeric()
+s_knn <- sort(table(seuil_opti), decreasing = T)[1] |> 
+  names() |>
+  as.numeric()
+
+
+mod_knn_opti <- kknn::kknn(Depression_severity ~., train = dta_train, test = dta_test, k = k_knn)
+pred_classe_knn <- apply(mod_knn_opti$prob, MARGIN = 1, FUN = function(x) return(ifelse(x[2] > s_knn, 1, 0)))
+
+table(dta_test$Depression_severity, pred_classe_knn)
 
 
 # Random forest
