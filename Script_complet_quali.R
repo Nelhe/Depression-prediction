@@ -7,7 +7,7 @@ library(ggplot2)
 
 load("dta.RData")
 dta <- dta[, -c(1, 9:11, 13:14)] |>
-  dplyr::mutate(Depression_severity = as.factor(ifelse(Depression_severity %in% c(0,1), 0, 1)))
+  dplyr::mutate(Depression_severity = as.factor(ifelse(Depression_severity == 0, 0, 1)))
 
 summary(dta)
 
@@ -62,7 +62,7 @@ for (k in 1:10){
   k_opti[[k]] <- tune_knn[which(f1_scores == max(f1_scores))[1],1]
   seuil_opti[[k]] <- tune_knn[which(f1_scores == max(f1_scores))[1],2]
   
-  print(paste("kNN fold :", k, "/10 - DONE"))
+  print(paste("kNN fold :", k, "/ 10 - DONE"))
 }
 
 k_opti
@@ -105,7 +105,7 @@ for (k in 1:10){
   }
   
   seuil_opti[[k]] <- tune_glm[which(f1_scores == max(f1_scores))[1],1]
-  print(paste("GLM fold :", k, "/10 - DONE"))
+  print(paste("GLM fold :", k, "/ 10 - DONE"))
 }
 
 seuil_opti
@@ -154,7 +154,7 @@ for (k in 1:10){
   lambda_opti[[k]] <- tune_glmnet[which(f1_scores == max(f1_scores))[1],2]
   seuil_opti[[k]] <- tune_glmnet[which(f1_scores == max(f1_scores))[1],3]
   
-  print(paste("GLM net fold :", k, "/10 - DONE"))
+  print(paste("GLM net fold :", k, "/ 10 - DONE"))
 }
 
 alpha_opti
@@ -212,7 +212,7 @@ for (k in 1:10){
   C_opti[[k]] <- tune_svm[which(f1_scores == max(f1_scores))[1],1]
   seuil_opti[[k]] <- tune_svm[which(f1_scores == max(f1_scores))[1],2]
   
-  print(paste("SVM fold :", k, "/10 - DONE"))
+  print(paste("SVM fold :", k, "/ 10 - DONE"))
 }
 
 C_opti
@@ -253,7 +253,7 @@ for (i in 1:nrow(tune_rf)){
   
   oob_error[i] <- mod_rf$prediction.error
   
-  print(paste("Random forest :", i, "/810 - DONE"))
+  print(paste("Random forest :", i, "/ 810 - DONE"))
 }
   
 mtry_rf <- tune_rf[which(oob_error == min(oob_error))[1],1]
@@ -273,14 +273,9 @@ conf_rf
 # Comparaison des performances
 ########################################
 
-# ici : balanced accuracy, F1-score, taux de faux positifs, taux de faux négatifs
+# ici : F1-score, taux de faux positifs, taux de faux négatifs
 
 tab_perf <- data.frame(Méthode = c("kNN", "GLM", "GLM net", "SVM", "Random forest"),
-              Balanced_accuracy = c(bal_acc(conf_knn),
-                                    bal_acc(conf_glm),
-                                    bal_acc(conf_glmnet),
-                                    bal_acc(conf_svm),
-                                    bal_acc(conf_rf)),
               F1_score = c(f1_tab(conf_knn),
                            f1_tab(conf_glm),
                            f1_tab(conf_glmnet),
@@ -300,3 +295,88 @@ tab_perf <- data.frame(Méthode = c("kNN", "GLM", "GLM net", "SVM", "Random fore
 tab_perf
 
 save(tab_perf, file = "tab_perf.rData")
+
+
+########################################
+# Sélection de variables
+########################################
+
+library(RcmdrMisc)
+
+# Stepwise avec critères AIC et BIC
+mod_step <- stepwise(mod_glm_opti, direction = 'backward', criterion = 'AIC')
+mod_step_bic <- stepwise(mod_glm_opti, direction = 'backward', criterion = 'BIC')
+
+mod_step$formula
+mod_step_bic$formula
+
+# Optimisation du seuil pour chaque nouveau modèle, par validation croisée 10-fold
+tune_glm <- expand.grid(s = seq(0.05, 0.5, by = 0.05))
+
+seuil_opti_aic <- rep(0, 10)
+seuil_opti_bic <- rep(0, 10)
+
+for (k in 1:10){
+  train <- dta_train[-segs[[k]],]
+  valid <- dta_train[segs[[k]],]
+  
+  f1_scores_aic <- rep(0, nrow(tune_glm))
+  f1_scores_bic <- rep(0, nrow(tune_glm))
+  
+  for (i in 1:nrow(tune_glm)){
+    mod_step <- glm(mod_step$formula, data = train, family = 'binomial')
+    mod_step_bic <- glm(mod_step_bic$formula, data = train, family = 'binomial')
+    
+    pred_aic <- predict(mod_step, newdata = valid, type = 'response')
+    pred_bic <- predict(mod_step_bic, newdata = valid, type = 'response')
+    
+    pred_classe_aic <- ifelse(pred_aic >= tune_glm[i,1], 1, 0)
+    pred_classe_bic <- ifelse(pred_bic >= tune_glm[i,1], 1, 0)
+    
+    f1_scores_aic[i] <- f1(as.numeric(valid$Depression_severity) - 1,
+                           as.numeric(pred_classe_aic))
+    f1_scores_bic[i] <- f1(as.numeric(valid$Depression_severity) - 1,
+                           as.numeric(pred_classe_bic))
+  }
+  
+  seuil_opti_aic[[k]] <- tune_glm[which(f1_scores_aic == max(f1_scores_aic))[1],1]
+  seuil_opti_bic[[k]] <- tune_glm[which(f1_scores_bic == max(f1_scores_bic))[1],1]
+  print(paste("GLM fold :", k, "/ 10 - DONE"))
+}
+
+seuil_opti_aic
+seuil_opti_bic
+
+# Prédiction avec le seuil optimal
+s_aic <- sort(table(seuil_opti_aic), decreasing = T)[1] |> 
+  names() |>
+  as.numeric()
+s_bic <- sort(table(seuil_opti_bic), decreasing = T)[1] |> 
+  names() |>
+  as.numeric()
+
+pred_aic <- predict(mod_step, newdata = dta_test, type = 'response')
+pred_classe_aic <- ifelse(pred_aic >= s_aic, 1, 0)
+pred_bic <- predict(mod_step_bic, newdata = dta_test, type = 'response')
+pred_classe_bic <- ifelse(pred_bic >= s_bic, 1, 0)
+
+conf_aic <- table(dta_test$Depression_severity, pred_classe_aic)
+conf_bic <- table(dta_test$Depression_severity, pred_classe_bic)
+
+conf_glm
+conf_aic
+conf_bic
+
+# Comparaison avec le modèle complet
+tab_perf_glm <- data.frame(Modèle = c("Complet", "Step AIC", "Step BIC"),
+                       F1_score = c(f1_tab(conf_glm),
+                                    f1_tab(conf_aic),
+                                    f1_tab(conf_bic)),
+                       Faux_positifs = c(tfp(conf_glm),
+                                         tfp(conf_aic),
+                                         tfp(conf_bic)),
+                       Faux_negatifs = c(tfn(conf_glm),
+                                         tfn(conf_aic),
+                                         tfn(conf_bic)))
+
+tab_perf_glm
