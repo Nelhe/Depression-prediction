@@ -29,24 +29,16 @@ ind_train <- sample(1:nrow(dta), 0.8*nrow(dta))   # 80/20
 dta_train <- dta[ind_train,]
 dta_test <- dta[-ind_train,]
 
-f1 <- function(ypred, ytrue){
-  tab <- as.matrix(table(ytrue, ypred))
-  
-  if (ncol(tab) == 2 & nrow(tab) == 2) {
-    return(tab[2,2]/ (tab[2,2] + tab[1,2]/2 + tab[2,1]/2) )
-  } else if (colnames(ta) == '0'){
-    return(0)
-  } else {
-    return(tab[2,1] / (tab[2,1] + tab[1,1]/2))
-  }
-}
+segs <- pls::cvsegments(nrow(dta_train), 10)
+
+source("Func_perf.R")
 
 
 # k plus proches voisins
+library(kknn)
+
 tune_knn <- expand.grid(k = 1:50,
                         s = seq(0.2, 0.5, by = 0.05))
-
-segs <- pls::cvsegments(nrow(dta_train), 10)
 
 k_opti <- rep(0, 10)
 seuil_opti <- rep(0, 10)
@@ -58,7 +50,7 @@ for (k in 1:10){
   f1_scores <- rep(0, nrow(tune_knn))
   
   for (i in 1:nrow(tune_knn)){
-    mod_knn <- kknn::kknn(Depression_severity ~., train = train, test = valid, k = tune_knn[i,1])
+    mod_knn <- kknn(Depression_severity ~., train = train, test = valid, k = tune_knn[i,1])
     
     pred_classe <- apply(mod_knn$prob, MARGIN = 1, FUN = function(x, s) return(ifelse(x[2] > s, 1, 0)),
                          s = tune_knn[i,2])
@@ -70,7 +62,7 @@ for (k in 1:10){
   k_opti[[k]] <- tune_knn[which(f1_scores == max(f1_scores))[1],1]
   seuil_opti[[k]] <- tune_knn[which(f1_scores == max(f1_scores))[1],2]
   
-  print(k)
+  print(paste("kNN fold :", k, "/10 - DONE"))
 }
 
 k_opti
@@ -87,13 +79,12 @@ s_knn <- sort(table(seuil_opti), decreasing = T)[1] |>
 mod_knn_opti <- kknn::kknn(Depression_severity ~., train = dta_train, test = dta_test, k = k_knn)
 pred_classe_knn <- apply(mod_knn_opti$prob, MARGIN = 1, FUN = function(x) return(ifelse(x[2] > s_knn, 1, 0)))
 
-table(dta_test$Depression_severity, pred_classe_knn)
+conf_knn <- table(dta_test$Depression_severity, pred_classe_knn)
+conf_knn
 
 
 # GLM
 tune_glm <- expand.grid(s = seq(0.05, 0.5, by = 0.05))
-
-segs <- pls::cvsegments(nrow(dta_train), 10)
 
 seuil_opti <- rep(0, 10)
 
@@ -114,7 +105,7 @@ for (k in 1:10){
   }
   
   seuil_opti[[k]] <- tune_glm[which(f1_scores == max(f1_scores))[1],1]
-  print(k)
+  print(paste("GLM fold :", k, "/10 - DONE"))
 }
 
 seuil_opti
@@ -127,19 +118,75 @@ mod_glm_opti <- glm(Depression_severity ~., data = dta_train, family = 'binomial
 pred_glm <- predict(mod_glm_opti, newdata = dta_test, type = 'response')
 pred_classe_glm <- ifelse(pred_glm >= s_glm, 1, 0)
 
-table(dta_test$Depression_severity, pred_classe_glm)
+conf_glm <- table(dta_test$Depression_severity, pred_classe_glm)
+conf_glm
 
+# GLM net
+library(glmnet)
 
-# LDA
+tune_glmnet <- expand.grid(alp = seq(0, 1, length = 5),
+                           lb = seq(1e-4, 1e-1, length = 5),
+                           s = seq(0.05, 0.5, by = 0.05))
+
+alpha_opti <- rep(0, 10)
+lambda_opti <- rep(0, 10)
+seuil_opti <- rep(0, 10)
+
+for (k in 1:10){
+  train <- dta_train[-segs[[k]],]
+  valid <- dta_train[segs[[k]],]
+  
+  f1_scores <- rep(0, nrow(tune_glmnet))
+  
+  for (i in 1:nrow(tune_glmnet)){
+    mod_glmnet <- glmnet(x = as.matrix(train[-8]), y = train$Depression_severity, 
+                         family = 'binomial',
+                         alpha = tune_glmnet[i,1], lambda = tune_glmnet[i,2])
+    
+    pred <- predict(mod_glmnet, newx = as.matrix(valid[-8]), type = 'response')
+    pred_classe <- ifelse(pred > tune_glmnet[i,3], 1, 0)
+    
+    f1_scores[i] <- f1(as.numeric(valid$Depression_severity) - 1, 
+                       as.numeric(pred_classe))
+  }
+  
+  alpha_opti[[k]] <- tune_glmnet[which(f1_scores == max(f1_scores))[1],1]
+  lambda_opti[[k]] <- tune_glmnet[which(f1_scores == max(f1_scores))[1],2]
+  seuil_opti[[k]] <- tune_glmnet[which(f1_scores == max(f1_scores))[1],3]
+  
+  print(paste("GLM net fold :", k, "/10 - DONE"))
+}
+
+alpha_opti
+lambda_opti
+seuil_opti
+
+alpha_glmnet <- sort(table(alpha_opti), decreasing = T)[1] |> 
+  names() |>
+  as.numeric()
+lambda_glmnet <- sort(table(lambda_opti), decreasing = T)[1] |> 
+  names() |>
+  as.numeric()
+s_glmnet <- sort(table(seuil_opti), decreasing = T)[1] |> 
+  names() |>
+  as.numeric()
+
+mod_glmnet_opti <- glmnet(x = as.matrix(dta_train[-8]), y = dta_train$Depression_severity, 
+                          family = 'binomial',
+                          alpha = alpha_glmnet, lambda = lambda_glmnet)
+
+pred_glmnet <- predict(mod_glmnet_opti, newx = as.matrix(dta_test[-8]), type = 'response')
+pred_classe_glmnet <- ifelse(pred_glmnet > s_glmnet, 1, 0)
+
+conf_glmnet <- table(dta_test$Depression_severity, pred_classe_glmnet)
+conf_glmnet
 
 
 # SVM
 library(e1071)
 
-tune_svm <- expand.grid(C = seq(0.1, 2, length = 20),
+tune_svm <- expand.grid(C = seq(0.1, 2, length = 5),
                         s = seq(0.05, 0.5, by = 0.05))
-
-segs <- pls::cvsegments(nrow(dta_train), 10)
 
 C_opti <- rep(0, 10)
 seuil_opti <- rep(0, 10)
@@ -155,7 +202,7 @@ for (k in 1:10){
     
     pred <- predict(mod_svm, newdata = valid, probability = T) |>
       attributes()
-    pred_classe <- apply(pred$probabilities, MARGIN = 1, FUN = function(x, s) return(ifelse(x[2] > s, 1, 0)),
+    pred_classe <- apply(pred$probabilities, MARGIN = 1, FUN = function(x, s) return(ifelse(x[1] > s, 1, 0)),
                          s = tune_svm[i,2])
     
     f1_scores[i] <- f1(as.numeric(valid$Depression_severity) - 1, 
@@ -165,24 +212,28 @@ for (k in 1:10){
   C_opti[[k]] <- tune_svm[which(f1_scores == max(f1_scores))[1],1]
   seuil_opti[[k]] <- tune_svm[which(f1_scores == max(f1_scores))[1],2]
   
-  print(k)
+  print(paste("SVM fold :", k, "/10 - DONE"))
 }
 
 C_opti
 seuil_opti
 
-k_knn <- sort(table(k_opti), decreasing = T)[1] |> 
+C_svm <- sort(table(C_opti), decreasing = T)[1] |> 
   names() |>
   as.numeric()
-s_knn <- sort(table(seuil_opti), decreasing = T)[1] |> 
+s_svm <- sort(table(seuil_opti), decreasing = T)[1] |> 
   names() |>
   as.numeric()
 
 
-mod_knn_opti <- kknn::kknn(Depression_severity ~., train = dta_train, test = dta_test, k = k_knn)
-pred_classe_knn <- apply(mod_knn_opti$prob, MARGIN = 1, FUN = function(x) return(ifelse(x[2] > s_knn, 1, 0)))
+mod_svm_opti <- svm(Depression_severity ~., data = dta_train, cost = C_svm, probability = T)
+pred_svm <- predict(mod_svm_opti, newdata = dta_test, probability = T) |>
+  attributes()
+pred_classe_svm <- apply(pred_svm$probabilities, MARGIN = 1, FUN = function(x, s) return(ifelse(x[2] > s, 1, 0)),
+                     s = s_svm)
 
-table(dta_test$Depression_severity, pred_classe_knn)
+conf_svm <- table(dta_test$Depression_severity, pred_classe_svm)
+conf_svm
 
 
 # Random forest
@@ -202,7 +253,7 @@ for (i in 1:nrow(tune_rf)){
   
   oob_error[i] <- mod_rf$prediction.error
   
-  print(i)
+  print(paste("Random forest :", k, "/810 - DONE"))
 }
   
 mtry_rf <- tune_rf[which(oob_error == min(oob_error))[1],1]
@@ -214,10 +265,36 @@ mod_rf_opti <- ranger(Depression_severity ~., data = dta_train, mtry = mtry_rf,
 pred_rf <- predict(mod_rf_opti, data = dta_test, type = 'response')
 pred_classe_rf <- apply(pred_rf$predictions, MARGIN = 1, FUN = function(x) return(ifelse(x[2] > s_rf, 1, 0)))
 
-table(dta_test$Depression_severity, pred_classe_rf)
+conf_rf <- table(dta_test$Depression_severity, pred_classe_rf)
+conf_rf
+
 
 ########################################
-# Comparaison des erreurs de prédiction
+# Comparaison des performances
 ########################################
 
+# ici : balanced accuracy, F1-score, taux de faux positifs, taux de faux négatifs
 
+tab_perf <- c(Méthode = c("kNN", "GLM", "GLM net", "SVM", "Random forest"),
+              Balanced_accuracy = c(bal_acc(conf_knn),
+                                    bal_acc(conf_glm),
+                                    bal_acc(conf_glmnet),
+                                    bal_acc(conf_svm),
+                                    bal_acc(conf_rf)),
+              F1_score = c(f1_tab(conf_knn),
+                           f1_tab(conf_glm),
+                           f1_tab(conf_glmnet),
+                           f1_tab(conf_svm),
+                           f1_tab(conf_rf)),
+              Faux_positifs = c(tfp(conf_knn),
+                                tfp(conf_glm),
+                                tfp(conf_glmnet),
+                                tfp(conf_svm),
+                                tfp(conf_rf)),
+              Faux_negatifs = c(tfn(conf_knn),
+                                tfn(conf_glm),
+                                tfn(conf_glmnet),
+                                tfn(conf_svm),
+                                tfn(conf_rf)))
+
+tab_perf
