@@ -298,7 +298,7 @@ tab_perf <- data.frame(Méthode = c("kNN", "GLM", "GLM net", "SVM", "Random fore
 tab_perf
 
 save(tab_perf, file = "tab_perf.rData")
-
+save(conf_knn, conf_glm, conf_glmnet, conf_svm, conf_rf, file = "conf_matrix.rData")
 
 ########################################
 # Sélection de variables
