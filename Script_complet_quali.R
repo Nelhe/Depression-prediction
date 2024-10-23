@@ -212,108 +212,49 @@ perf_rf
 
 # ici : F1-score, taux de faux positifs, taux de faux négatifs
 
-tab_perf <- data.frame(Méthode = c("kNN", "GLM", "GLM net", "SVM", "Random forest"),
-              F1_score = c(f1_tab(conf_knn),
-                           f1_tab(conf_glm),
-                           f1_tab(conf_glmnet),
-                           f1_tab(conf_svm),
-                           f1_tab(conf_rf)),
-              Faux_positifs = c(tfp(conf_knn),
-                                tfp(conf_glm),
-                                tfp(conf_glmnet),
-                                tfp(conf_svm),
-                                tfp(conf_rf)),
-              Faux_negatifs = c(tfn(conf_knn),
-                                tfn(conf_glm),
-                                tfn(conf_glmnet),
-                                tfn(conf_svm),
-                                tfn(conf_rf)))
+comp_perf <- dplyr::bind_rows(perf_glm, perf_glmnet, perf_knn, perf_rf, perf_svm) |>
+  dplyr::arrange(desc(F1_score))
 
-tab_perf
+head(comp_perf)
 
-# save(tab_perf, file = "tab_perf.rData")
-# save(conf_knn, conf_glm, conf_glmnet, conf_svm, conf_rf, file = "conf_matrix.rData")
+best_mod_overall <- glmnet(x = dta_train[-8], y = dta_train$Depression_severity,
+                           family = "binomial", alpha = 0.25, lambda = 0.05005)
+best_mod_overall$beta
+pred_best <- predict(best_mod_overall, newx = as.matrix(dta_test[-8]), type = 'response')
+preds_best_classe <- ifelse(pred_best > 0.35, 1, 0)
 
-########################################
-# Sélection de variables
-########################################
+conf_fin <- table(dta_test$Depression_severity, preds_best_classe)
 
-library(RcmdrMisc)
+save(comp_perf, file = 'comp_perf.RData')
 
-# Stepwise avec critères AIC et BIC
-mod_step <- stepwise(mod_glm_opti, direction = 'backward', criterion = 'AIC')
-mod_step_bic <- stepwise(mod_glm_opti, direction = 'backward', criterion = 'BIC')
+best_mod_2 <- glmnet(x = dta_train[-8], y = dta_train$Depression_severity,
+                     family = "binomial", alpha = 0.5, lambda = 0.025075)
+best_mod_2$beta
 
-mod_step$formula
-mod_step_bic$formula
+best_mod_3 <- glmnet(x = dta_train[-8], y = dta_train$Depression_severity,
+                     family = "binomial", alpha = 0.75, lambda = 0.025075)
+best_mod_3$beta
 
-# Optimisation du seuil pour chaque nouveau modèle, par validation croisée 10-fold
-tune_glm <- expand.grid(s = seq(0.05, 0.5, by = 0.05))
+best_mod_4 <- glmnet(x = dta_train[-8], y = dta_train$Depression_severity,
+                     family = "binomial", alpha = 0.25, lambda = 0.025075)
+best_mod_4$beta
 
-seuil_opti_aic <- rep(0, 10)
-seuil_opti_bic <- rep(0, 10)
+best_mod_5 <- glmnet(x = dta_train[-8], y = dta_train$Depression_severity,
+                     family = "binomial", alpha = 1, lambda = 0.025075)
+best_mod_5$beta
 
-for (k in 1:10){
-  train <- dta_train[-segs[[k]],]
-  valid <- dta_train[segs[[k]],]
-  
-  f1_scores_aic <- rep(0, nrow(tune_glm))
-  f1_scores_bic <- rep(0, nrow(tune_glm))
-  
-  for (i in 1:nrow(tune_glm)){
-    mod_step <- glm(mod_step$formula, data = train, family = 'binomial')
-    mod_step_bic <- glm(mod_step_bic$formula, data = train, family = 'binomial')
-    
-    pred_aic <- predict(mod_step, newdata = valid, type = 'response')
-    pred_bic <- predict(mod_step_bic, newdata = valid, type = 'response')
-    
-    pred_classe_aic <- ifelse(pred_aic >= tune_glm[i,1], 1, 0)
-    pred_classe_bic <- ifelse(pred_bic >= tune_glm[i,1], 1, 0)
-    
-    f1_scores_aic[i] <- f1(as.numeric(valid$Depression_severity) - 1,
-                           as.numeric(pred_classe_aic))
-    f1_scores_bic[i] <- f1(as.numeric(valid$Depression_severity) - 1,
-                           as.numeric(pred_classe_bic))
-  }
-  
-  seuil_opti_aic[[k]] <- tune_glm[which(f1_scores_aic == max(f1_scores_aic))[1],1]
-  seuil_opti_bic[[k]] <- tune_glm[which(f1_scores_bic == max(f1_scores_bic))[1],1]
-  print(paste("GLM fold :", k, "/ 10 - DONE"))
-}
+# Transformer la matrice de confusion en data frame pour ggplot2
+conf_fin_df <- as.data.frame(conf_fin)
 
-seuil_opti_aic
-seuil_opti_bic
-
-# Prédiction avec le seuil optimal
-s_aic <- sort(table(seuil_opti_aic), decreasing = T)[1] |> 
-  names() |>
-  as.numeric()
-s_bic <- sort(table(seuil_opti_bic), decreasing = T)[1] |> 
-  names() |>
-  as.numeric()
-
-pred_aic <- predict(mod_step, newdata = dta_test, type = 'response')
-pred_classe_aic <- ifelse(pred_aic >= s_aic, 1, 0)
-pred_bic <- predict(mod_step_bic, newdata = dta_test, type = 'response')
-pred_classe_bic <- ifelse(pred_bic >= s_bic, 1, 0)
-
-conf_aic <- table(dta_test$Depression_severity, pred_classe_aic)
-conf_bic <- table(dta_test$Depression_severity, pred_classe_bic)
-
-conf_glm
-conf_aic
-conf_bic
-
-# Comparaison avec le modèle complet
-tab_perf_glm <- data.frame(Modèle = c("Complet", "Step AIC", "Step BIC"),
-                       F1_score = c(f1_tab(conf_glm),
-                                    f1_tab(conf_aic),
-                                    f1_tab(conf_bic)),
-                       Faux_positifs = c(tfp(conf_glm),
-                                         tfp(conf_aic),
-                                         tfp(conf_bic)),
-                       Faux_negatifs = c(tfn(conf_glm),
-                                         tfn(conf_aic),
-                                         tfn(conf_bic)))
-
-tab_perf_glm
+# Création d'un heatmap avec ggplot2
+ggplot(data = conf_fin_df, aes(x = preds_best_classe, y = Var1)) +
+  geom_tile(aes(fill = Freq), color = "white") +
+  scale_fill_gradient(low = "#f7c6c7", high = "#d73027") +
+  geom_text(aes(label = Freq), vjust = 1) +  # Ajouter les fréquences dans chaque case
+  labs(title = "Matrice de confusion - GLM net", 
+       x = "Prédictions", 
+       y = "Valeurs réelles") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),  # Centrer le titre
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12))
