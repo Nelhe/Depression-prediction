@@ -31,7 +31,7 @@ dta_test <- dta[-ind_train,]
 
 segs <- pls::cvsegments(nrow(dta_train), 10)
 
-source("Func_perf.R")
+source("Scripts exploratoires/Func_perf.R")
 
 
 # k plus proches voisins
@@ -297,8 +297,8 @@ tab_perf <- data.frame(Méthode = c("kNN", "GLM", "GLM net", "SVM", "Random fore
 
 tab_perf
 
-save(tab_perf, file = "tab_perf.rData")
-save(conf_knn, conf_glm, conf_glmnet, conf_svm, conf_rf, file = "conf_matrix.rData")
+# save(tab_perf, file = "tab_perf.rData")
+# save(conf_knn, conf_glm, conf_glmnet, conf_svm, conf_rf, file = "conf_matrix.rData")
 
 ########################################
 # Sélection de variables
