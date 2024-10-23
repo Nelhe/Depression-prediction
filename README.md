@@ -9,15 +9,16 @@ Nous cherchons à élaborer un algorithme de prédiction de la dépression chez 
 
 Le jeu de données reprend, pour les pays étudiés :
 * des variables signalétiques : genre, âge, métier, responsabilités, statut familial et enfants
-* la variable à prédire : score de dépression sur le test du [DASS-21](https://www.bristol.ac.uk/media-library/sites/sps/documents/c-change/dass.pdf)
+* la variable à prédire : présence de dépression, basée sur le test du [DASS-21](https://www.bristol.ac.uk/media-library/sites/sps/documents/c-change/dass.pdf)
 * des variables portant sur la perception de la vie quotidienne : heures supplémentaires, isolation sociale, appréciation extérieure...
 
 
 ## Organisation du dépôt
 
 Vous trouverez dans ce dépôt :
-* les scripts exploratoires pour chaque méthode de Machine Learning envisagée (dossier Scripts exploratoires)
-* le script complet (Script_complet.R) retraçant l'intégralité de l'étude
-* les graphiques générés par le script complet (dossier Graphiques)
-* le jeu de données aux formats RData et CSV
+* les scripts exploratoires pour chaque méthode de Machine Learning envisagée (dossier Scripts exploratoires) ;
+* les scripts complets (Script_complet.R et Script_complet_quali.R) retraçant l'intégralité de l'étude ;
+* les graphiques générés par le script complet (dossier Graphiques) ;
+* les fichiers générés par le script complet (dossier Résultats intermédiaires) ;
+* le jeu de données aux formats RData et CSV ;
 * le diaporama pour la présentation.
