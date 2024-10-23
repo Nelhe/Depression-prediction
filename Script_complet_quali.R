@@ -244,21 +244,24 @@ tune_rf <- expand.grid(mtry = 2:10,
                       s = seq(0.05, 0.5, by = 0.05))
 
 segs <- pls::cvsegments(nrow(dta_train), 10)
-
-oob_error <- rep(0, nrow(tune_rf))
   
 for (i in 1:nrow(tune_rf)){
   mod_rf <- ranger(Depression_severity ~., data = dta_train, mtry = tune_rf[i,1], 
                    min.node.size = tune_rf[i,2], probability = T)
   
-  oob_error[i] <- mod_rf$prediction.error
+  pred <- mod_rf$predictions
+  pred_classe <- apply(pred, MARGIN = 1, FUN = function(x, s) return(ifelse(x[2] > s, 1, 0)),
+                       s = tune_rf[i,3])
+  
+  f1_scores[i] <- f1(as.numeric(dta_train$Depression_severity) - 1, 
+                     as.numeric(pred_classe))
   
   print(paste("Random forest :", i, "/ 810 - DONE"))
 }
   
-mtry_rf <- tune_rf[which(oob_error == min(oob_error))[1],1]
-node_size_rf <- tune_rf[which(oob_error == min(oob_error))[1],2]
-s_rf <- tune_rf[which(oob_error == min(oob_error))[1],3]
+mtry_rf <- tune_rf[which(f1_scores == max(f1_scores))[1],1]
+node_size_rf <- tune_rf[which(f1_scores == max(f1_scores))[1],2]
+s_rf <- tune_rf[which(f1_scores == max(f1_scores))[1],3]
 
 mod_rf_opti <- ranger(Depression_severity ~., data = dta_train, mtry = mtry_rf,
                        min.node.size = node_size_rf, probability = T)
